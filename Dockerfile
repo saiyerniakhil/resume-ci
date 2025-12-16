@@ -12,8 +12,6 @@ RUN apt-get update && \
 
 COPY . .
 
-# Set environment variables for Cloud Run
-ENV PORT=8080
-
 # Run the application with gunicorn
-CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 app:app
+# Cloud Run will set the PORT environment variable
+CMD exec gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 120 app:app
