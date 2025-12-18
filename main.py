@@ -1,3 +1,5 @@
+from operator import itemgetter
+
 import requests
 from typing import Dict, Any, List, Optional
 from pylatex import Document, NoEscape
@@ -61,11 +63,13 @@ class Resume:
             self.data = data
         else:
             # fetch data from API
-            work_ex = fetch("https://saiyerniakhil.in/api/work-experience.json")
-            social_links = fetch("https://saiyerniakhil.in/api/social-links.json")
+            data = fetch("https://saiyerniakhil.in/api/data.json")
+            personal_info, social_links, work_ex, skills = itemgetter('personalInfo', 'socialLinks','workExperience', 'skills')(data)
             self.data = {
                 'workEx': work_ex if work_ex else [],
-                'socialLinks': social_links if social_links else {}
+                'socialLinks': social_links if social_links else {},
+                'personalInfo': personal_info if personal_info else {},
+                'skills': skills if skills else {}
             }
 
     def createHeader(self) -> None:
@@ -96,15 +100,20 @@ class Resume:
             self.doc.append(NoEscape('\n\\text{\\textbar}\n'.join(links)))
             self.doc.append(NoEscape(r'\end{center}'))
 
-    def createWorkExSection(self, work_items: List[Dict[str, Any]]) -> None:
+    def createWorkExSection(self) -> None:
         """Create work experience section with all jobs"""
         # Section header
         self.doc.append(NoEscape(r'\section*{Work Experience}'))
         self.doc.append(NoEscape(r'{\color{MainBlue}\hrule height 0.5mm}'))
         self.doc.append(NoEscape(r'\vspace{3mm}'))
 
-        for idx, job in enumerate(work_items):
-            # Job header
+        # Get work experience from self.data and ensure it's a list
+        work_ex = self.data.get('workEx', [])
+        if isinstance(work_ex, dict):
+            work_ex = [work_ex]
+
+        for idx, job in enumerate(work_ex):
+            # Job header - get values with defaults
             role = job.get('role', '')
             period = job.get('period', '')
             company = job.get('company', '')
@@ -124,8 +133,53 @@ class Resume:
                 self.doc.append(NoEscape(r'\end{itemize}'))
 
             # Add spacing between jobs (except for last one)
-            if idx < len(work_items) - 1:
+            if idx < len(work_ex) - 1:
                 self.doc.append(NoEscape(r'\vspace{2mm}'))
+
+    def createSkills(self) -> None:
+        """Create Skills Section"""
+        # Section header
+        self.doc.append(NoEscape(r'\section*{Skills}'))
+        self.doc.append(NoEscape(r'{\color{MainBlue}\hrule height 0.5mm}'))
+        self.doc.append(NoEscape(r'\vspace{3mm}'))
+
+        # Get skills from self.data
+        skills = self.data.get('skills', [])
+
+        if skills:
+            self.doc.append(NoEscape(r'\begin{itemize}[leftmargin=*]'))
+            self.doc.append(NoEscape(r'\setlength{\itemsep}{0.02em}'))
+
+            for skill in skills:
+                skill_type = skill.get('type', '')
+                values = skill.get('values', [])
+
+                if skill_type and values:
+                    # Join values with comma and space
+                    values_str = ', '.join(values)
+                    self.doc.append(NoEscape(f'\\item \\textbf{{{skill_type}:}} {values_str}'))
+
+            self.doc.append(NoEscape(r'\end{itemize}'))
+
+    def createEducation(self) -> None:
+        """Create Education Section"""
+        # Section header
+        self.doc.append(NoEscape(r'\section*{Education}'))
+        self.doc.append(NoEscape(r'{\color{MainBlue}\hrule height 0.5mm}'))
+        self.doc.append(NoEscape(r'\vspace{3mm}'))
+
+        # University of Wisconsin
+        self.doc.append(NoEscape(r'\noindent'))
+        self.doc.append(NoEscape(r'\textbf{University of Wisconsin,} United States \hfill Jan 2023 - Aug 2024\\'))
+        self.doc.append(NoEscape(r'M.S. Computer Science \hfill GPA: 3.8\\'))
+        self.doc.append(NoEscape(r'Relevant Courses: Machine Learning, Network Security, Programming Language Concepts, Concurrent Programming, Natural Language Processing, Web Development'))
+        self.doc.append(NoEscape(r'\vspace{3mm}'))
+
+        # Sathyabama Institute
+        self.doc.append(NoEscape(r'\noindent'))
+        self.doc.append(NoEscape(r'\textbf{Sathyabama Institute of Science and Technology,} Chennai, India \hfill July 2016 - May 2020 \\'))
+        self.doc.append(NoEscape(r'B.E. Computer Science and Engineering \hfill GPA: 8.45\\'))
+        self.doc.append(NoEscape(r'Courses: Data Structures, Advanced Data Structures, Machine Learning, DBMS, Operating Systems, Responsive Web Design'))
 
     def create(self, output_filename: str = "resume") -> str:
         """Generate the PDF resume"""
@@ -134,11 +188,14 @@ class Resume:
 
         # Create work experience section
         if 'workEx' in self.data and self.data['workEx']:
-            work_ex = self.data['workEx']
-            # Handle both single job dict and list of jobs
-            if isinstance(work_ex, dict):
-                work_ex = [work_ex]
-            self.createWorkExSection(work_ex)
+            self.createWorkExSection()
+
+        # Create skills section
+        if 'skills' in self.data and self.data['skills']:
+            self.createSkills()
+
+        # Create education section
+        self.createEducation()
 
         # Generate PDF
         self.doc.generate_pdf(output_filename, clean_tex=False)
@@ -165,6 +222,24 @@ if __name__ == "__main__":
                     "Contributed key features to the Internal Developer Platform using \\textbf{Go}, \\textbf{GraphQL}, and \\textbf{React}, enabling seamless team transitions and improving developer onboarding efficiency.",
                     "Developed and deployed a cross-platform CLI tool for creating WSL and Docker-based workspaces to \\textbf{5,600} developers across GEICO, standardizing development environments."
                 ]
+            }
+        ],
+        'skills': [
+            {
+                "type": "Languages",
+                "values": ["JavaScript", "TypeScript", "HTML", "CSS", "Python", "Java", "PHP", "Scala"]
+            },
+            {
+                "type": "Frontend",
+                "values": ["React.js", "Next.JS", "Redux", "Material UI", "TailwindCSS", "Astro.js", "Webpack", "Jest"]
+            },
+            {
+                "type": "Backend Technologies",
+                "values": ["Node.js", "REST API", "MongoDB", "Postgres", "SQLite", "Flask", "Docker", "Kubernetes"]
+            },
+            {
+                "type": "Tools",
+                "values": ["Visual Studio Code", "Git", "Chrome Developer Tools", "Postman", "Figma", "Jira", "Microsoft Office Suite", "WordPress", "GitHub", "Agile (Scrum) Methodologies"]
             }
         ]
     }

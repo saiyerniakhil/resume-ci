@@ -1,5 +1,6 @@
 import os
 import tempfile
+import shutil
 import logging
 from datetime import datetime
 from flask import Flask, request, jsonify, send_file
@@ -21,8 +22,7 @@ app = Flask(__name__)
 
 # Configuration from environment variables
 GCS_BUCKET_NAME = os.getenv('GCS_BUCKET_NAME')
-WORK_EXPERIENCE_API_URL = os.getenv('WORK_EXPERIENCE_API_URL', 'https://saiyerniakhil.in/api/work-experience.json')
-SOCIAL_LINKS_API_URL = os.getenv('SOCIAL_LINKS_API_URL', 'https://saiyerniakhil.in/api/social-links.json')
+AUTH_KEY = os.getenv('AUTH_KEY', '')
 
 # Initialize GCS client (only if bucket name is configured)
 storage_client = None
@@ -78,142 +78,72 @@ def health():
     return jsonify({'status': 'healthy'}), 200
 
 
-@app.route('/generate-resume', methods=['POST'])
-def generate_resume():
-    """
-    Generate resume PDF from JSON data
 
-    Expected JSON format:
-    {
-        "socialLinks": {
-            "linkedin": "https://...",
-            "github": "https://...",
-            "website": "https://...",
-            "email": "email@example.com",
-            "phone": "+1 234-567-8900"
-        },
-        "workEx": [
-            {
-                "role": "Software Developer",
-                "company": "Company Name",
-                "location": "City, State",
-                "period": "Jan 2025 - Present",
-                "description": [
-                    "Description point 1",
-                    "Description point 2"
-                ]
-            }
-        ],
-        "uploadToGcs": false  // Optional: set to true to upload to GCS instead of returning file
-    }
-    """
-    try:
-        data = request.get_json()
-
-        if not data:
-            return jsonify({'error': 'No JSON data provided'}), 400
-
-        # Validate required fields
-        if 'workEx' not in data and 'socialLinks' not in data:
-            return jsonify({'error': 'Either workEx or socialLinks must be provided'}), 400
-
-        upload_to_gcs_flag = data.pop('uploadToGcs', False)
-
-        # Create a temporary directory for PDF generation
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Generate resume
-            resume = Resume(data=data)
-
-            # Change to temp directory for PDF generation
-            original_cwd = os.getcwd()
-            os.chdir(tmpdir)
-
-            try:
-                pdf_filename = resume.create(output_filename='resume')
-                pdf_path = os.path.join(tmpdir, pdf_filename)
-
-                # Upload to GCS if requested
-                if upload_to_gcs_flag:
-                    gcs_url = upload_to_gcs(pdf_path)
-                    if gcs_url:
-                        return jsonify({
-                            'success': True,
-                            'message': 'Resume generated and uploaded to GCS',
-                            'gcs_url': gcs_url
-                        }), 200
-                    else:
-                        return jsonify({
-                            'success': False,
-                            'message': 'Resume generated but GCS upload failed (bucket not configured)'
-                        }), 500
-
-                # Send the PDF file
-                return send_file(
-                    pdf_path,
-                    mimetype='application/pdf',
-                    as_attachment=True,
-                    download_name='resume.pdf'
-                )
-            finally:
-                os.chdir(original_cwd)
-
-    except Exception as e:
-        logger.error(f"Error generating resume: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/generate-resume-from-api', methods=['GET'])
+@app.route('/generate', methods=['GET'])
 def generate_resume_from_api():
     """
     Generate resume PDF by fetching data from your API endpoints
     This will fetch data from:
-    - https://saiyerniakhil.in/api/work-experience.json
-    - https://saiyerniakhil.in/api/social-links.json
+    - https://saiyerniakhil.in/api/data.json
 
     Query parameters:
+    - auth_key: Required API key for authentication
     - upload_to_gcs: Set to 'true' to upload to GCS and return URL (default: false)
     """
+    # Check if AUTH_KEY is configured
+    if not AUTH_KEY or AUTH_KEY == '':
+        logger.error("AUTH_KEY not configured in environment")
+        return jsonify({'error': 'Server configuration error'}), 500
+
+    # Validate auth key from request
+    provided_key = request.args.get('auth_key', '')
+    if provided_key != AUTH_KEY:
+        logger.warning(f"Invalid auth key attempt from {request.remote_addr}")
+        return jsonify({'error': 'Forbidden - Invalid API key'}), 403
+
     try:
         upload_to_gcs_flag = request.args.get('upload_to_gcs', 'false').lower() == 'true'
 
-        # Create temporary directory for PDF generation
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Generate resume (will fetch from API automatically)
-            resume = Resume()  # No data provided, will fetch from API
+        # Generate resume (will fetch from API automatically)
+        resume = Resume()
 
-            # Change to temp directory for PDF generation
-            original_cwd = os.getcwd()
+        # Change to temp directory for PDF generation
+        original_cwd = os.getcwd()
+        tmpdir = tempfile.mkdtemp()
+
+        try:
             os.chdir(tmpdir)
+            pdf_filename = resume.create(output_filename='resume')
+            pdf_path = os.path.join(tmpdir, pdf_filename)
 
-            try:
-                pdf_filename = resume.create(output_filename='resume')
-                pdf_path = os.path.join(tmpdir, pdf_filename)
+            # Upload to GCS if requested
+            if upload_to_gcs_flag:
+                gcs_url = upload_to_gcs(pdf_path)  # Use timestamped name
+                if gcs_url:
+                    logger.info(f"Resume uploaded to GCS: {gcs_url}")
+                    return jsonify({
+                        'success': True,
+                        'message': 'Resume generated and uploaded to GCS',
+                        'gcs_url': gcs_url
+                    }), 200
+                else:
+                    return jsonify({
+                        'success': False,
+                        'message': 'Resume generated but GCS upload failed (bucket not configured)'
+                    }), 500
 
-                # Upload to GCS if requested
-                if upload_to_gcs_flag:
-                    gcs_url = upload_to_gcs(pdf_path, destination_blob_name='resume.pdf')
-                    if gcs_url:
-                        logger.info(f"Resume uploaded to GCS: {gcs_url}")
-                        return jsonify({
-                            'success': True,
-                            'message': 'Resume generated and uploaded to GCS',
-                            'gcs_url': gcs_url
-                        }), 200
-                    else:
-                        return jsonify({
-                            'success': False,
-                            'message': 'Resume generated but GCS upload failed (bucket not configured)'
-                        }), 500
-
-                # Send the PDF file
-                return send_file(
-                    pdf_path,
-                    mimetype='application/pdf',
-                    as_attachment=True,
-                    download_name='resume.pdf'
-                )
-            finally:
-                os.chdir(original_cwd)
+            # Send the PDF file - Flask will handle cleanup after sending
+            return send_file(
+                pdf_path,
+                mimetype='application/pdf',
+                as_attachment=True,
+                download_name='resume.pdf'
+            )
+        finally:
+            os.chdir(original_cwd)
+            # Cleanup temp directory after response is sent
+            if os.path.exists(tmpdir):
+                shutil.rmtree(tmpdir, ignore_errors=True)
 
     except Exception as e:
         logger.error(f"Error generating resume from API: {str(e)}")
