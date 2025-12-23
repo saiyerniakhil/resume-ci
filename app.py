@@ -52,8 +52,7 @@ def upload_to_gcs(file_path: str, destination_blob_name: str = None) -> str:
     try:
         # Generate destination blob name if not provided
         if not destination_blob_name:
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            destination_blob_name = f"resumes/resume_{timestamp}.pdf"
+            destination_blob_name = "resume.pdf"
 
         # Get bucket and create blob
         bucket = storage_client.bucket(GCS_BUCKET_NAME)
