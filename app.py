@@ -79,16 +79,16 @@ def health():
 
 
 
-@app.route('/generate', methods=['GET'])
+@app.route('/generate', methods=['POST'])
 def generate_resume_from_api():
     """
     Generate resume PDF by fetching data from your API endpoints
     This will fetch data from:
     - https://saiyerniakhil.in/api/data.json
 
-    Query parameters:
+    Request body (JSON):
     - auth_key: Required API key for authentication
-    - upload_to_gcs: Set to 'true' to upload to GCS and return URL (default: false)
+    - upload_to_gcs: Set to true to upload to GCS and return URL (default: false)
     """
     # Check if AUTH_KEY is configured
     if not AUTH_KEY or AUTH_KEY == '':
@@ -96,13 +96,14 @@ def generate_resume_from_api():
         return jsonify({'error': 'Server configuration error'}), 500
 
     # Validate auth key from request
-    provided_key = request.args.get('auth_key', '')
+    data = request.get_json() or {}
+    provided_key = data.get('auth_key', '')
     if provided_key != AUTH_KEY:
         logger.warning(f"Invalid auth key attempt from {request.remote_addr}")
         return jsonify({'error': 'Forbidden - Invalid API key'}), 403
 
     try:
-        upload_to_gcs_flag = request.args.get('upload_to_gcs', 'false').lower() == 'true'
+        upload_to_gcs_flag = data.get('upload_to_gcs', False)
 
         # Generate resume (will fetch from API automatically)
         resume = Resume()
