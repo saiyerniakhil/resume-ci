@@ -172,14 +172,14 @@ class Resume:
         self.doc.append(NoEscape(r'\noindent'))
         self.doc.append(NoEscape(r'\textbf{University of Wisconsin,} United States \hfill Jan 2023 - Aug 2024\\'))
         self.doc.append(NoEscape(r'M.S. Computer Science \hfill GPA: 3.8\\'))
-        self.doc.append(NoEscape(r'Relevant Courses: Machine Learning, Network Security, Programming Language Concepts, Concurrent Programming, Natural Language Processing, Web Development'))
+        self.doc.append(NoEscape(r'Relevant Courses: Machine Learning, Network Security, Programming Language Concepts, Concurrent Programming, Natural Language Processing, Web Development\\'))
         self.doc.append(NoEscape(r'\vspace{3mm}'))
 
         # Sathyabama Institute
         self.doc.append(NoEscape(r'\noindent'))
         self.doc.append(NoEscape(r'\textbf{Sathyabama Institute of Science and Technology,} Chennai, India \hfill July 2016 - May 2020 \\'))
         self.doc.append(NoEscape(r'B.E. Computer Science and Engineering \hfill GPA: 8.45\\'))
-        self.doc.append(NoEscape(r'Courses: Data Structures, Advanced Data Structures, Machine Learning, DBMS, Operating Systems, Responsive Web Design'))
+        self.doc.append(NoEscape(r'Courses: Data Structures, Advanced Data Structures, Machine Learning, DBMS, Operating Systems, Responsive Web Design\\'))
 
     def create(self, output_filename: str = "resume") -> str:
         """Generate the PDF resume"""
